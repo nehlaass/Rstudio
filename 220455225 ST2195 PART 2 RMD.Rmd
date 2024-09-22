@@ -1,0 +1,337 @@
+---
+title: "Part 2 Coursework"
+author: '220455224'
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+a)
+Load packages
+```{r}
+library(RSQLite)
+library(ggplot2)
+```
+
+Establish a connection to the SQLite database
+```{r}
+conn <- dbConnect(RSQLite::SQLite(), "airline8.db")
+```
+
+Create a dataframe for the 10 consecutive years chosen
+```{r}
+for(i in c(1990:1999)){
+  ontime_df <- read.csv(paste0(i, ".csv"), header = TRUE)
+  if (i==1990) {
+    dbWriteTable(conn, 'ontime', ontime_df,append = TRUE)
+  } else {
+    dbWriteTable(conn, 'ontime', ontime_df, append = TRUE)
+  }
+}
+```
+
+Find the best time interval of the day to fly for each year.
+```{r}
+for (year in 1990:1999) {
+  # Query to calculate average delay for each time interval of the day for each year
+  time_query <- paste("
+    SELECT 
+        '", year, "' AS Year,
+        CASE 
+            WHEN CAST(SUBSTR(DepTime, 1, 2) AS INTEGER) BETWEEN 0 AND 5 THEN 'Late Night'
+            WHEN CAST(SUBSTR(DepTime, 1, 2) AS INTEGER) BETWEEN 6 AND 11 THEN 'Morning'
+            WHEN CAST(SUBSTR(DepTime, 1, 2) AS INTEGER) BETWEEN 12 AND 17 THEN 'Afternoon'
+            ELSE 'Evening'
+        END AS time_interval,
+        AVG(ArrDelay) AS avg_delay
+    FROM ontime
+    WHERE ArrTime IS NOT NULL
+      AND Year = ", year, "
+    GROUP BY time_interval
+    ORDER BY avg_delay ASC
+  ", sep = "")
+  
+  # Execute query
+  time_result <- dbGetQuery(conn, time_query)
+  
+  # Print results for each year
+  print(time_result)
+}
+```
+
+Further find the best hour in the morning to fly.
+```{r}
+for (year in 1990:1999) {
+  # Query to calculate average delay for each hourly interval of the morning for each year
+  hour_query <- paste("
+    SELECT 
+        '", year, "' AS Year,
+        CASE 
+            WHEN CAST(SUBSTR(DepTime, 1, 2) AS INTEGER) BETWEEN 6 AND 6 THEN '06:00-07:00'
+            WHEN CAST(SUBSTR(DepTime, 1, 2) AS INTEGER) BETWEEN 7 AND 7 THEN '07:00-08:00'
+            WHEN CAST(SUBSTR(DepTime, 1, 2) AS INTEGER) BETWEEN 8 AND 8 THEN '08:00-09:00'
+            WHEN CAST(SUBSTR(DepTime, 1, 2) AS INTEGER) BETWEEN 9 AND 9 THEN '09:00-10:00'
+            WHEN CAST(SUBSTR(DepTime, 1, 2) AS INTEGER) BETWEEN 10 AND 10 THEN '10:00-11:00'
+            WHEN CAST(SUBSTR(DepTime, 1, 2) AS INTEGER) BETWEEN 11 AND 11 THEN '11:00-12:00'
+            ELSE NULL
+        END AS hour_interval,
+        AVG(ArrDelay) AS avg_delay
+    FROM ontime
+    WHERE ArrTime IS NOT NULL
+      AND Year = ", year, "
+      AND CAST(SUBSTR(DepTime, 1, 2) AS INTEGER) BETWEEN 6 AND 11
+    GROUP BY hour_interval
+    ORDER BY avg_delay ASC
+  ", sep = "")
+  
+  # Execute query
+  hour_result <- dbGetQuery(conn, hour_query)
+  
+  # Print results for each year
+  print(hour_result)
+}
+```
+
+
+Find the best day in a week to fly for each year.
+```{r}
+for (year in 1990:1999) {
+  # Query to calculate average delay for each day of the week for each year
+  day_query <- paste("
+    SELECT 
+        '", year, "' AS Year,
+        DayOfWeek,
+        AVG(ArrDelay) AS avg_delay
+    FROM ontime
+    WHERE ArrDelay IS NOT NULL
+      AND Year = ", year, "
+    GROUP BY DayOfWeek
+    ORDER BY avg_delay ASC
+  ", sep = "")
+  
+  # Execute query
+  day_result <- dbGetQuery(conn, day_query)
+  
+  # Print results for each year
+  print(day_result)
+}
+```
+
+Find the best month to fly for each year then plot a graph for each year.
+```{r}
+for (year in 1990:1999) {
+  # Query to cslculate average delay for each month of each year
+  month_query <- paste("
+    SELECT 
+        '", year, "' AS Year,
+        Month,
+        AVG(ArrDelay) AS avg_delay
+    FROM ontime
+    WHERE ArrDelay IS NOT NULL
+     AND Year = ", year, "
+    GROUP BY Month
+    ORDER BY avg_delay ASC
+  ", sep = "")
+  
+  # Execute query
+  month_result <- dbGetQuery(conn, month_query)
+  
+  # Print results for each year
+  print(month_result)
+  
+  # Convert Month to factor with 12 levels
+  month_result$Month <- factor(month_result$Month, levels = 1:12)
+  
+  # Plot graph for each year
+  print(ggplot(month_result, aes(x = Month, y = avg_delay, group = Year, color = Year)) +
+    geom_line() +
+    geom_point() +
+    labs(title = paste("Average Arrival Delay by Month for Year", year),
+         x = "Month", y = "Average Arrival Delay") +
+    theme_minimal())
+}
+```
+Disconnect from the database
+```{r}
+dbDisconnect(conn)
+```
+
+part b
+Import the relevant packages 
+```{r}
+library(RSQLite)
+library(ggplot2)
+```
+
+Read and setup table for plane-data.csv
+```{r}
+planes_df <- read.csv("plane-data.csv", header = TRUE)
+dbWriteTable(conn, "planes", planes_df, append = TRUE)
+```
+
+Create a dataframe for the 10 consecutive years chosen
+```{r}
+for(i in c(1990:1999)){
+  ontime_df <- read.csv(paste0(i, ".csv"), header = TRUE)
+  if (i==1990) {
+    dbWriteTable(conn, 'ontime', ontime_df)
+  } else {
+    dbWriteTable(conn, 'ontime', ontime_df, append = TRUE)
+  }
+}
+```
+
+Create a new dataframe to extract tail numbers of planes with the manufacturing year of 1999 and earlier from planes.csv
+```{r}
+# Filter out rows where year is not "None"
+planes_age <- planes_df[planes_df$year != "None", c("year", "tailnum")]
+
+# Convert year column to numeric
+planes_age$year <- as.numeric(planes_age$year)
+
+# Filter planes_age to include only planes made in 1999 and before
+planes_age <- subset(planes_age, year <= 1999)
+
+# Rename the "year" column to "manufactured_year"
+planes_age <- planes_age %>%
+  rename(manufactured_year = year)
+
+# Check the structure of planes_age
+str(planes_age)
+
+dbWriteTable(conn,"planes_age_table" , planes_age ,overwrite = TRUE)
+```
+
+Merge "ontime" with "planes_age" by the tail number of planes
+```{r}
+# Execute SQL query to merge ontime with planes_age
+merged_df <- dbGetQuery(conn, "
+  SELECT 
+    ontime.*, 
+    planes_age_table.manufactured_year,
+    planes_age_table.tailnum AS tailnum_planes
+  FROM ontime
+  INNER JOIN planes_age_table ON ontime.TailNum = planes_age_table.tailnum
+")
+
+# Convert `merged_df` data frame to a table in the SQLite database
+dbWriteTable(conn, "merged_table", merged_df, overwrite = TRUE)
+```
+
+Print out tables and graphs for each year to see whether older planes suffers more delays.
+```{r}
+# Create an empty list to store ggplot objects
+plot_list <- list()
+
+for (year in 1990:1999) {
+  age_query <- paste("
+    SELECT 
+      '", year, "' AS Year,
+      manufactured_year AS manuyear,
+      '", year, "' - manufactured_year AS age_of_plane,
+      AVG((DepDelay + ArrDelay) / 2) AS avg_delay
+    FROM merged_Table
+    WHERE ArrDelay IS NOT NULL AND DepDelay IS NOT NULL
+    AND manufactured_year <= ", year, " 
+    GROUP BY age_of_plane
+    ORDER BY age_of_plane ASC
+  ")
+  
+  # Execute the query
+  age_result <- dbGetQuery(conn, age_query)
+  
+  # print each year tables
+  print(age_result)
+  
+  # Ensure the variable is numeric
+  age_result$age_of_plane <- as.numeric(age_result$age_of_plane)
+  
+  # Create a ggplot object
+  p <- ggplot(age_result, aes(x = age_of_plane, y = avg_delay)) +
+    geom_line() + 
+    labs(title = paste("Average Delay by Plane Age for Year", year),
+         x = "Age of Plane", y = "Average Delay")
+  
+  # Store the ggplot object in the list
+  plot_list[[as.character(year)]] <- p
+}
+
+# Print the line plots for each year
+for (year in 1990:1999) {
+  print(plot_list[[as.character(year)]])
+}
+```
+Disconnect from the database.
+```{r}
+dbDisconnect(conn)
+```
+
+part c
+Load relevant packages
+```{r}
+library(dplyr)
+```
+
+Create dataframes to store probabilities and coefficients
+```{r}
+prob_df <- data.frame(Year = integer(), Probability = numeric())
+coeff_df <- data.frame(Year = integer(), Feature = character(), Coefficient = numeric())
+```
+
+Create a dataframe for carriers.csv
+```{r}
+carriers_df <- read.csv("carriers.csv", header = TRUE)
+```
+
+Create tables and barplots for each year then fit logistic regression model
+```{r}
+# Loop over each year
+for (i in c(1990:1999)) {
+  # Filter data for each year
+  ontime_c <- read.csv(paste0(i, ".csv"), header = TRUE)
+  
+  # Left join with carriers_df to include all unique carrier information
+  ontime_cc <- ontime_c %>%
+    left_join(carriers_df, by = c("UniqueCarrier" = "Code"))
+  
+  # Prepare the features and target variable which is "Diverted"
+  features <- c("DayOfWeek", "CRSDepTime", "DepTime","CRSArrTime",  "DepDelay", "Distance", "UniqueCarrier")
+  target <- "Diverted"
+  
+  # Convert "UniqueCarrier" from character to a factor
+  ontime_cc$UniqueCarrier <- as.factor(ontime_cc$UniqueCarrier)
+  
+  # Fit logistic regression model
+  model <- glm(formula = as.formula(paste(target, "~", paste(features, collapse = " + "))),
+                data = ontime_cc, family = binomial)
+ 
+  # Predict probabilities of plane being diverted
+  probabilities <- predict(model, type = "response")
+  
+  # Aggregate and store probabilities
+  year_prob <- mean(probabilities)
+  prob_df <- rbind(prob_df, data.frame(Year = i, Probability = year_prob))
+
+  # Get coefficients
+  coefficients <- coef(model)
+  
+  # Store coefficients and its corresponding year
+  coeff_df <- rbind(coeff_df, data.frame(Year = rep(i, length(coefficients)), Feature = names(coefficients), Coefficient = coefficients))
+
+  # Sort coefficients in ascending order 
+  coeff_sorted <- coefficients[order(coefficients)]
+  
+  # Create a barplot for each year
+  barplot(coeff_sorted, main = paste("Logistic Regression Coefficients for Year", i),
+          xlab = "Features", ylab = "Coefficient Value")
+  
+  # Print coeff_df for each year
+  cat("Coefficients for year", i, "in ascending order:\n")
+  print(data.frame(Feature = names(coeff_sorted), Coefficient = coeff_sorted))
+}
+
+# Plot a line graph for probability of diversion over 1990 to 1999
+plot(prob_df$Year, prob_df$Probability, type = "l",
+     main = "Probability of Diverted US Flights Over Time",
+     xlab = "Year", ylab = "Probability")
+
+```

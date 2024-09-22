@@ -1,0 +1,204 @@
+---
+title: "part 1"
+author: "220455224"
+date: "`r Sys.Date()`"
+output: html_document
+---
+QUESTION 1A)
+set up initial values 
+x0 is the initial value
+N is the number of iterations
+s is the standard deviation
+```{r}
+x0 <- 0 
+N <- 10000
+s <- 1
+```
+Set up Metropolis-Hastings algorithm
+```{r}
+metropolis_hastings <- function(initial_value, iterations, std_dev){
+  samples <- numeric(iterations)
+  current_value <- initial_value
+  
+  for (i in 1:iterations) {
+    x_asterisk <- rnorm(1, mean = current_value, sd = std_dev)
+    
+    log_ratio <- -abs(x_asterisk) + abs(current_value)
+    log_u <- log(runif(1))
+    
+    if (log_u < log_ratio) {
+      current_value <- x_asterisk
+    }
+    
+    samples[i] <- current_value
+  }
+  
+  return(samples)
+}
+```
+Run the metropolis hasting algorithm
+```{r}
+samples <- metropolis_hastings(x0 , N , s)
+```
+Plot histogram and kernel plot density
+```{r}
+hist(samples, main= "Metropolis-Hastings Samples", xlab = "x", prob = TRUE)
+lines(density(samples), col = "blue")
+curve(0.5 * exp(-abs(x)), from = -10, to = 10, col = "red", add = TRUE)
+```
+Get sample mean and sample standard deviation
+```{r}
+cat("Sample Mean:" , mean(samples), "\n")
+cat("Sample Standard Deviation:", sd(samples), "\n")
+```
+QUESTION 1B)
+Set up Metropolis-Hastings algorithm
+```{r}
+metropolis_hastings <- function(initial_value, iterations, std_dev, j) {
+  samples <- numeric(iterations)
+  current_value <- initial_value
+
+  for (i in 1:iterations) {
+    x_star <- rnorm(1, mean = current_value, sd = std_dev)
+    ratio <- exp(-(abs(x_star)^j)) / exp(-(abs(current_value)^j))
+    u <- runif(1)
+
+    if (u < ratio) {
+      current_value <- x_star
+    }
+
+    samples[i] <- current_value
+  }
+
+  return(samples)
+}
+```
+
+Set the parameters as given by the question
+```{r}
+N <- 2000
+s <- 0.001
+J <- 4
+initial_x <- 0
+```
+
+Run the algorithm and print Mj and Vj values
+```{r}
+for (j in 1:J) {
+  # Generate J chains with different initial values
+  chains <- replicate(J, metropolis_hastings(initial_x, N, s, j), simplify = FALSE)
+
+  # Calculate Mj for each chain
+  Mj_values <- sapply(chains, function(chain) mean(chain^j))
+  
+  # Print mean of each chain
+  cat("For j =", j, "\n")
+  cat("Mj values:", Mj_values[j], "\n")
+
+  # Calculate variance
+  Vj <- sapply(chains, function(chain) var(chain^j))
+
+  # Print Variance of each chain
+  cat("Variance values:", Vj[j], "\n")
+}
+```
+Calculate and print the overall within-sample mean W
+```{r}
+# Calculate the overall within-sample mean W 
+W <- mean(Vj)
+
+# Print W
+cat("Overall Within-Sample Variance W:", W)
+```
+Calculate and print overall sample mean M
+```{r}
+# Calculate overall mean M
+M <- mean(Mj_values)
+
+# Print M 
+cat("Overall Sample Mean M:", M)
+```
+Calculate and print between sample variance B
+```{r}
+# Calculate Between sample variance
+B <- mean((Mj_values - M)^2)
+
+# Print B
+cat("Between Sample Variance B:", B)
+```
+Calculate and print R hat
+```{r}
+# Calculate R_hat
+R_hat <- sqrt((B + W) / W)
+
+# Print R_hat 
+cat("R_hat:", R_hat)
+```
+When s-values is in the interval between 0.001 and 1
+
+Set seed
+```{r}
+set.seed(1)
+```
+Calculate R hat for a given s
+```{r}
+calc_R_hat <- function(s) {
+  # Set parameters
+  N <- 2000
+  J <- 4
+  initial_x <- 0
+  
+  # Initialize vectors to store Mj and Vj values
+  Mj_values <- numeric()
+  Vj_values <- numeric()
+  
+  # Calculate Mj and Vj for each chain and collect them
+  for (j in 1:J) {
+    chains <- replicate(J, metropolis_hastings(initial_x, N, s, j), simplify = FALSE)
+    
+    # Calculate Mj for each chain
+    Mj_values <- c(Mj_values, sapply(chains, function(chain) mean(chain^j)))
+    
+    # Calculate Vj for each chain
+    Vj_values <- c(Vj_values, sapply(chains, function(chain) var(chain^j)))
+    
+    # Print mean of each chain
+    cat("For j =", j, "\n")
+    cat("Mj values:", Mj_values[j], "\n")
+    # Print Variance of each chain
+    cat("Variance values:", Vj_values[j], "\n")
+  }
+  
+  # Calculate the overall within-sample mean W 
+  W <- mean(Vj_values)
+  
+  # Calculate overall mean M
+  M <- mean(Mj_values)
+  
+  # Calculate Between sample variance
+  B <- mean((Mj_values - M)^2)
+  
+  # Calculate R_hat
+  R_hat <- sqrt((B + W) / W)
+  
+  # Print results
+  cat("Overall Within-Sample Variance:", W, "\n")
+  cat("Overall Sample Mean:", M, "\n")
+  cat("Between Sample Variance B:", B, "\n")
+  cat("R_hat:", R_hat, "\n")
+  
+  return(R_hat)
+}
+```
+Set s values by the given parameter of 0.001 to 1
+```{r}
+s_values <- seq(0.001, 1, length.out = 100)
+```
+Calculate and print R hat for each s-value while also printing the chains values for checking
+```{r}
+mean_R_hat_values <- sapply(s_values, calc_R_hat)
+```
+Plot the graph
+```{r}
+plot(s_values, mean_R_hat_values, type = "l", xlab = "s", ylab = "R_hat", main = "R_hat over s values")
+```
